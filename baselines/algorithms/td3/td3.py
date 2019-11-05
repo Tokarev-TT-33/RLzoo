@@ -66,88 +66,17 @@ tl.logging.set_verbosity(tl.logging.DEBUG)
 ###############################  TD3  ####################################
 
 
-# class PolicyNetwork(Model):
-#     ''' the network for generating non-determinstic (Gaussian distributed) action from the state input '''
-
-#     def __init__(self, num_inputs, num_actions, hidden_dim, action_range=1., init_w=3e-3):
-#         super(PolicyNetwork, self).__init__()
-
-#         # w_init = tf.keras.initializers.glorot_normal(seed=None)
-#         w_init = tf.random_uniform_initializer(-init_w, init_w)
-
-#         self.linear1 = Dense(n_units=hidden_dim, act=tf.nn.relu, W_init=w_init, in_channels=num_inputs, name='policy1')
-#         self.linear2 = Dense(n_units=hidden_dim, act=tf.nn.relu, W_init=w_init, in_channels=hidden_dim, name='policy2')
-#         self.linear3 = Dense(n_units=hidden_dim, act=tf.nn.relu, W_init=w_init, in_channels=hidden_dim, name='policy3')
-
-#         self.output_linear = Dense(n_units=num_actions, W_init=w_init, \
-#         b_init=tf.random_uniform_initializer(-init_w, init_w), in_channels=hidden_dim, name='policy_output')
-
-#         self.action_range = action_range
-#         self.num_actions = num_actions
-
-#     def forward(self, state):
-#         x = self.linear1(state)
-#         x = self.linear2(x)
-#         x = self.linear3(x)
-
-#         output = tf.nn.tanh(self.output_linear(x))  # unit range output [-1, 1]
-
-#         return output
-
-#     def evaluate(self, state, eval_noise_scale):
-#         ''' 
-#         generate action with state for calculating gradients;
-#         eval_noise_scale: as the trick of target policy smoothing, for generating noisy actions.
-#         '''
-#         state = state.astype(np.float32)
-#         action = self.forward(state)
-
-#         action = self.action_range * action
-
-#         # add noise
-#         normal = Normal(0, 1)
-#         eval_noise_clip = 2 * eval_noise_scale
-#         noise = normal.sample(action.shape) * eval_noise_scale
-#         noise = tf.clip_by_value(noise, -eval_noise_clip, eval_noise_clip)
-#         action = action + noise
-
-#         return action
-
-#     def get_action(self, state, explore_noise_scale):
-#         ''' generate action with state for interaction with envronment '''
-#         action = self.forward([state])
-#         action = action.numpy()[0]
-
-#         # add noise
-#         normal = Normal(0, 1)
-#         noise = normal.sample(action.shape) * explore_noise_scale
-#         action = self.action_range * action + noise
-
-#         return action.numpy()
-
-#     def sample_action(self, ):
-#         ''' generate random actions for exploration '''
-#         a = tf.random.uniform([self.num_actions], -1, 1)
-
-#         return self.action_range * a.numpy()
-
-
 class TD3():
     ''' twin-delayed ddpg '''
-    def __init__(self, QNetwork, PolicyNetwork, state_dim, action_dim, replay_buffer_capacity=5e5, num_hidden_layer=3,\
-                 hidden_dim=32, action_range=1., policy_target_update_interval=5, q_lr=3e-4, policy_lr=3e-4 ):
+    def __init__(self, net_list, optimizers_list, state_dim, action_dim, replay_buffer_capacity=5e5, \
+        action_range=1., policy_target_update_interval=5):
         self.replay_buffer = ReplayBuffer(replay_buffer_capacity)
         self.action_dim = action_dim
         self.action_range = action_range
-        name='td3'
 
-        # initialize all networks
-        self.q_net1 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_q1')
-        self.q_net2 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_q2')
-        self.target_q_net1 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_target_q1')
-        self.target_q_net2 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_target_q2')
-        self.policy_net = PolicyNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_policy')
-        self.target_policy_net = PolicyNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_target_policy')
+        # get all networks
+        [self.q_net1, self.q_net2, self.target_q_net1, self.target_q_net2, self.policy_net, self.target_policy_net]=net_list
+        
         print('Q Network (1,2): ', self.q_net1)
         print('Policy Network: ', self.policy_net)
 
@@ -159,9 +88,7 @@ class TD3():
         self.update_cnt = 0
         self.policy_target_update_interval = policy_target_update_interval
 
-        self.q_optimizer1 = tf.optimizers.Adam(q_lr)
-        self.q_optimizer2 = tf.optimizers.Adam(q_lr)
-        self.policy_optimizer = tf.optimizers.Adam(policy_lr)
+        [self.q_optimizer1, self.q_optimizer2, self.policy_optimizer] = optimizers_list
 
     def evaluate(self, state, eval_noise_scale, target=False):
         ''' 
@@ -173,9 +100,7 @@ class TD3():
             action = self.target_policy_net(state)
         else:
             action = self.policy_net(state)
-
         action = self.action_range * action
-
         # add noise
         normal = Normal(0, 1)
         eval_noise_clip = 2 * eval_noise_scale
@@ -232,20 +157,18 @@ class TD3():
                                  np.mean(reward, axis=0)) / (np.std(reward, axis=0)+1e-6)  # normalize with batch mean and std; plus a small number to prevent numerical problem
 
         # Training Q Function
-        target_q_input = tf.concat([next_state, new_next_action], 1)  # the dim 0 is number of samples
-        target_q_min = tf.minimum(self.target_q_net1(target_q_input), self.target_q_net2(target_q_input))
+        target_q_min = tf.minimum(self.target_q_net1([next_state, new_next_action]), self.target_q_net2([next_state, new_next_action]))
 
         target_q_value = reward + (1 - done) * gamma * target_q_min  # if done==1, only reward
-        q_input = tf.concat([state, action], 1)  # input of q_net
 
         with tf.GradientTape() as q1_tape:
-            predicted_q_value1 = self.q_net1(q_input)
+            predicted_q_value1 = self.q_net1([state, action])
             q_value_loss1 = tf.reduce_mean(tf.square(predicted_q_value1 - target_q_value))
         q1_grad = q1_tape.gradient(q_value_loss1, self.q_net1.trainable_weights)
         self.q_optimizer1.apply_gradients(zip(q1_grad, self.q_net1.trainable_weights))
 
         with tf.GradientTape() as q2_tape:
-            predicted_q_value2 = self.q_net2(q_input)
+            predicted_q_value2 = self.q_net2([state, action])
             q_value_loss2 = tf.reduce_mean(tf.square(predicted_q_value2 - target_q_value))
         q2_grad = q2_tape.gradient(q_value_loss2, self.q_net2.trainable_weights)
         self.q_optimizer2.apply_gradients(zip(q2_grad, self.q_net2.trainable_weights))
@@ -256,11 +179,10 @@ class TD3():
                 new_action = self.evaluate(
                     state, eval_noise_scale=0.0, target=False
                 )  # no noise, deterministic policy gradients
-                new_q_input = tf.concat([state, new_action], 1)
                 # ''' implementation 1 '''
-                # predicted_new_q_value = tf.minimum(self.q_net1(new_q_input),self.q_net2(new_q_input))
+                # predicted_new_q_value = tf.minimum(self.q_net1([state, new_action]),self.q_net2([state, new_action]))
                 ''' implementation 2 '''
-                predicted_new_q_value = self.q_net1(new_q_input)
+                predicted_new_q_value = self.q_net1([state, new_action])
                 policy_loss = -tf.reduce_mean(predicted_new_q_value)
             p_grad = p_tape.gradient(policy_loss, self.policy_net.trainable_weights)
             self.policy_optimizer.apply_gradients(zip(p_grad, self.policy_net.trainable_weights))
@@ -287,8 +209,8 @@ class TD3():
         load_model(self.target_policy_net, 'model_target_policy_net', 'TD3')
 
 
-    def learn(self, env, train_episodes, test_episodes=1000, max_steps=150, batch_size=64, explore_steps=500, update_itr=3, 
-        reward_scale = 1. , seed=2, save_interval=10, explore_noise_scale = 1.0, eval_noise_scale = 0.5, mode='train'):
+    def learn(self, env, train_episodes=1000, test_episodes=1000, max_steps=150, batch_size=64, explore_steps=500, update_itr=3, 
+        reward_scale = 1. , save_interval=10, explore_noise_scale = 1.0, eval_noise_scale = 0.5, mode='train', render=False):
         '''
         parameters
         ----------
@@ -304,11 +226,9 @@ class TD3():
         explore_noise_scale: range of action noise for exploration
         eval_noise_scale: range of action noise for evaluation of action value
         mode: 'train' or 'test'
+        render: if true, visualize the environment
 
         '''
-        random.seed(seed)
-        np.random.seed(seed)
-        tf.random.set_seed(seed)  # reproducible
 
         # training loop
         if mode=='train':
@@ -328,7 +248,7 @@ class TD3():
 
                     next_state, reward, done, _ = env.step(action)
                     next_state = next_state.astype(np.float32)
-                    env.render()
+                    if render: env.render()
                     done = 1 if done ==True else 0
 
                     self.replay_buffer.push(state, action, reward, next_state, done)
@@ -353,7 +273,7 @@ class TD3():
                 rewards.append(episode_reward)
             self.save_weights()
 
-        if mode=='test':
+        elif mode=='test':
             frame_idx = 0
             rewards = []
             t0 = time.time()
@@ -376,7 +296,7 @@ class TD3():
                     action = self.get_action(state, explore_noise_scale=1.0)
                     next_state, reward, done, _ = env.step(action)
                     next_state = next_state.astype(np.float32)
-                    env.render()
+                    if render: env.render()
                     done = 1 if done ==True else 0
 
                     state = next_state
@@ -391,3 +311,6 @@ class TD3():
                 print('Episode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'\
                 .format(eps, test_episodes, episode_reward, time.time()-t0 ) )
                 rewards.append(episode_reward)
+    
+        elif mode is not 'test':
+            print('unknow mode type, activate test mode as default')

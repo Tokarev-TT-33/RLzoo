@@ -9,7 +9,6 @@ tensorlayer==2.0.1
 import operator
 import os
 import re
-import random
 import gym
 
 
@@ -18,7 +17,7 @@ from importlib import import_module
 import numpy as np
 
 import tensorlayer as tl
-
+import tensorflow as tf
 
 def plot(episode_rewards, Algorithm_name, Env_name):
     '''
@@ -40,7 +39,7 @@ def plot(episode_rewards, Algorithm_name, Env_name):
 def plot_save_log(episode_rewards, Algorithm_name, Env_name):
     '''
     plot the learning curve, saved as ./img/Algorithm_name-Env_name.png, 
-    and save the rewards log as ./log/Algorithm_name-Env_name.npz
+    and save the rewards log as ./log/Algorithm_name-Env_name.npy
     :episode_rewards: array of floats
     :Algorithm_name: string
     :Env_name: string
@@ -53,7 +52,10 @@ def plot_save_log(episode_rewards, Algorithm_name, Env_name):
     if not os.path.exists('img'):
         os.makedirs('img')
     plt.savefig('./img/' + Algorithm_name + '-' + Env_name + '.png')
+    if not os.path.exists('log'):
+        os.makedirs('log')
     np.save('./log/'+ Algorithm_name + '-' + Env_name, episode_rewards)
+    plt.close()
 
 
 def save_model(model, Model_name, Algorithm_name):
@@ -110,20 +112,25 @@ def make_env(env_id):
     return env 
 
 
-def learn(env_id, algorithm, train_episodes, **kwargs):
-    algorithm = algorithm.lower()
-    module = get_algorithm_module(algorithm, algorithm)
-    # env = make_env(env_id)
-    getattr(module, 'learn')(env_id=env_id, train_episodes=train_episodes, **kwargs)  # call module.learn()
-
-
-
-# def get_algorithm_parameters(env, env_type, algorithm, **kwargs):
-#     """ Get algorithm hyper-parameters """
-#     module = get_algorithm_module(algorithm, 'default')
-#     return getattr(module, env_type)(env, **kwargs)
-
-
 def get_algorithm_module(algorithm, submodule):
     """ Get algorithm module in the corresponding folder """
     return import_module('.'.join(['algorithms', algorithm, submodule]))
+
+
+def call_default_params(env, envtype, alg, default_seed=True):
+    """ Get the default parameters for training from the default script """
+    alg = alg.lower()
+    default = import_module('.'.join(['algorithms', alg, 'default']))
+    params = getattr(default, envtype)(env, default_seed)  # need manually set seed in the main script if default_seed = False
+    return params
+
+def set_seed(seed, env=None):
+    """ set random seed for reproduciblity """
+    if isinstance(env, list):
+        for i in range(len(env)):
+            env[i].seed(seed[i])
+        seed = seed[0] # pick one seed for np and tf
+    elif env is not None:
+        env.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)

@@ -2,16 +2,12 @@
 Soft Actor-Critic
 using target Q instead of V net: 2 Q net, 2 target Q net, 1 policy net
 adding alpha loss
-
 paper: https://arxiv.org/pdf/1812.05905.pdf
 Actor policy is stochastic.
-
 Env: Openai Gym Pendulum-v0, continuous action space
-
 tensorflow 2.0.0a0
 tensorflow-probability 0.6.0
 tensorlayer 2.0.0
-
 &&
 pip install box2d box2d-kengz --user
 '''
@@ -23,7 +19,6 @@ import time
 
 import matplotlib.pyplot as plt
 import numpy as np
-from IPython.display import clear_output
 
 import gym
 import tensorflow as tf
@@ -44,18 +39,14 @@ tl.logging.set_verbosity(tl.logging.DEBUG)
 
 class SAC():
     ''' Soft Actor-Critic '''
-    def __init__(self, QNetwork, PolicyNetwork, state_dim, action_dim, replay_buffer_capacity=5e5, action_range=1., hidden_dim=32, num_hidden_layer=3, soft_q_lr=3e-4, policy_lr=3e-4, alpha_lr=3e-4):
+    def __init__(self, net_list, optimizers_list, state_dim, action_dim, replay_buffer_capacity=5e5, action_range=1.):
         self.replay_buffer = ReplayBuffer(replay_buffer_capacity)
         self.action_dim = action_dim
         self.action_range = action_range
-        name='sac'
 
-        # initialize all networks
-        self.soft_q_net1 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_q1')
-        self.soft_q_net2 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_q2')
-        self.target_soft_q_net1 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_target_q1')
-        self.target_soft_q_net2 = QNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_target_q2')
-        self.policy_net = PolicyNetwork(state_dim, action_dim, num_hidden_layer*[hidden_dim], name=name+'_policy')
+        # get all networks
+        [self.soft_q_net1, self.soft_q_net2, self.target_soft_q_net1, self.target_soft_q_net2, self.policy_net]=net_list
+       
         self.log_alpha = tf.Variable(0, dtype=np.float32, name='log_alpha')
         self.alpha = tf.math.exp(self.log_alpha)
         print('Soft Q Network (1,2): ', self.soft_q_net1)
@@ -65,15 +56,13 @@ class SAC():
         self.target_soft_q_net1 = self.target_ini(self.soft_q_net1, self.target_soft_q_net1)
         self.target_soft_q_net2 = self.target_ini(self.soft_q_net2, self.target_soft_q_net2)
 
-        self.soft_q_optimizer1 = tf.optimizers.Adam(soft_q_lr)
-        self.soft_q_optimizer2 = tf.optimizers.Adam(soft_q_lr)
-        self.policy_optimizer = tf.optimizers.Adam(policy_lr)
-        self.alpha_optimizer = tf.optimizers.Adam(alpha_lr)
+        [self.soft_q_optimizer1,  self.soft_q_optimizer2, self.policy_optimizer, self.alpha_optimizer] = optimizers_list
     
     def evaluate(self, state, epsilon=1e-6):
         ''' generate action with state for calculating gradients '''
         state = state.astype(np.float32)
-        mean, log_std = self.policy_net(state)
+        _ = self.policy_net(state)
+        mean, log_std = self.policy_net.policy_dist.get_param()  # as SAC uses TanhNorm instead of normal distribution, need original mean_std
         std = tf.math.exp(log_std)  # no clip in evaluation, clip affects gradients flow
 
         normal = Normal(0, 1)
@@ -92,7 +81,8 @@ class SAC():
 
     def get_action(self, state, deterministic=False):
         ''' generate action with state for interaction with envronment '''
-        mean, log_std = self.policy_net(np.array([state.astype(np.float32)]))
+        _ = self.policy_net(np.array([state.astype(np.float32)]))
+        mean, log_std = self.policy_net.policy_dist.get_param()
         std = tf.math.exp(log_std)
 
         normal = Normal(0, 1)
@@ -101,7 +91,7 @@ class SAC():
             mean + std * z
         )  # TanhNormal distribution as actions; reparameterization trick
 
-        action = self.action_range * mean if deterministic else action
+        action = self.action_range * tf.math.tanh(mean) if deterministic else action
         return action.numpy()[0]
 
     def sample_action(self, ):
@@ -136,21 +126,19 @@ class SAC():
 
         # Training Q Function
         new_next_action, next_log_prob, _, _, _ = self.evaluate(next_state)
-        target_q_input = tf.concat([next_state, new_next_action], 1)  # the dim 0 is number of samples
         target_q_min = tf.minimum(
-            self.target_soft_q_net1(target_q_input), self.target_soft_q_net2(target_q_input)
+            self.target_soft_q_net1([next_state, new_next_action]), self.target_soft_q_net2([next_state, new_next_action])
         ) - self.alpha * next_log_prob
         target_q_value = reward + (1 - done) * gamma * target_q_min  # if done==1, only reward
-        q_input = tf.concat([state, action], 1)  # the dim 0 is number of samples
 
         with tf.GradientTape() as q1_tape:
-            predicted_q_value1 = self.soft_q_net1(q_input)
+            predicted_q_value1 = self.soft_q_net1([state, action])
             q_value_loss1 = tf.reduce_mean(tf.losses.mean_squared_error(predicted_q_value1, target_q_value))
         q1_grad = q1_tape.gradient(q_value_loss1, self.soft_q_net1.trainable_weights)
         self.soft_q_optimizer1.apply_gradients(zip(q1_grad, self.soft_q_net1.trainable_weights))
 
         with tf.GradientTape() as q2_tape:
-            predicted_q_value2 = self.soft_q_net2(q_input)
+            predicted_q_value2 = self.soft_q_net2([state, action])
             q_value_loss2 = tf.reduce_mean(tf.losses.mean_squared_error(predicted_q_value2, target_q_value))
         q2_grad = q2_tape.gradient(q_value_loss2, self.soft_q_net2.trainable_weights)
         self.soft_q_optimizer2.apply_gradients(zip(q2_grad, self.soft_q_net2.trainable_weights))
@@ -158,11 +146,10 @@ class SAC():
         # Training Policy Function
         with tf.GradientTape() as p_tape:
             new_action, log_prob, z, mean, log_std = self.evaluate(state)
-            new_q_input = tf.concat([state, new_action], 1)  # the dim 0 is number of samples
             ''' implementation 1 '''
-            predicted_new_q_value = tf.minimum(self.soft_q_net1(new_q_input), self.soft_q_net2(new_q_input))
+            predicted_new_q_value = tf.minimum(self.soft_q_net1([state, new_action]), self.soft_q_net2([state, new_action]))
             ''' implementation 2 '''
-            # predicted_new_q_value = self.soft_q_net1(new_q_input)
+            # predicted_new_q_value = self.soft_q_net1([state, new_action])
             policy_loss = tf.reduce_mean(self.alpha * log_prob - predicted_new_q_value)
         p_grad = p_tape.gradient(policy_loss, self.policy_net.trainable_weights)
         self.policy_optimizer.apply_gradients(zip(p_grad, self.policy_net.trainable_weights))
@@ -201,9 +188,9 @@ class SAC():
         load_model(self.policy_net, 'model_policy_net', 'SAC')
 
 
-    def learn(self, env, train_episodes, test_episodes=1000, max_steps=150, batch_size=64, explore_steps=500, \
-        update_itr=3, policy_target_update_interval = 3,  reward_scale = 1. , seed=2, save_interval=20, \
-        mode='train', AUTO_ENTROPY = True, DETERMINISTIC = False):
+    def learn(self, env, train_episodes=1000, test_episodes=1000, max_steps=150, batch_size=64, explore_steps=500, \
+        update_itr=3, policy_target_update_interval = 3,  reward_scale = 1. , save_interval=20, \
+        mode='train', AUTO_ENTROPY = True, DETERMINISTIC = False, render=False):
         '''
         parameters
         ----------
@@ -218,12 +205,10 @@ class SAC():
         reward_scale: value range of reward
         save_interval: timesteps for saving the weights and plotting the results
         mode: 'train' or 'test'
-        AUTO_ENTROPY: automatically udpating variable alpha for entropy
-        DETERMINISTIC: stochastic action policy if False, otherwise deterministic
-
+        AUTO_ENTROPY: automatically updating variable alpha for entropy
+        DETERMINISTIC: stochastic action policy if False, otherwise deterministi
+        render: if true, visualize the environment
         '''
-        np.random.seed(seed)
-        tf.random.set_seed(seed)  # reproducible
 
         # training loop
         if mode=='train':
@@ -243,7 +228,7 @@ class SAC():
 
                     next_state, reward, done, _ = env.step(action)
                     next_state = next_state.astype(np.float32)
-                    env.render()
+                    if render: env.render()
                     done = 1 if done ==True else 0
 
                     self.replay_buffer.push(state, action, reward, next_state, done)
@@ -269,7 +254,7 @@ class SAC():
                 rewards.append(episode_reward)
             self.save_weights()
 
-        if mode=='test':
+        elif mode=='test':
             frame_idx = 0
             rewards = []
             t0 = time.time()
@@ -290,7 +275,7 @@ class SAC():
                     action = self.get_action(state, deterministic=DETERMINISTIC)
                     next_state, reward, done, _ = env.step(action)
                     next_state = next_state.astype(np.float32)
-                    env.render()
+                    if render: env.render()
                     done = 1 if done ==True else 0
 
                     state = next_state
@@ -305,3 +290,6 @@ class SAC():
                 print('Episode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'\
                 .format(eps, test_episodes, episode_reward, time.time()-t0 ) )
                 rewards.append(episode_reward)
+
+        elif mode is not 'test':
+            print('unknow mode type, activate test mode as default')
