@@ -2,6 +2,19 @@
 RLzoo is a collection of most practical reinforcement learning algorithms, frameworks and applications. It is implemented with Tensorflow 2.0 and API of neural network layers in TensorLayer 2, to provide a hands-on fast-developing approach for reinforcement learning practices and benchmarks. It supports basic toy-tests like [OpenAI Gym](https://gym.openai.com/) and [DeepMind Control Suite](https://github.com/deepmind/dm_control) with very simple configurations. Moreover, RLzoo supports robot learning benchmark environment [RLBench](https://github.com/stepjam/RLBench) based on  [Vrep](http://www.coppeliarobotics.com/)/[Pyrep](https://github.com/stepjam/PyRep) simulator. Other large-scale distributed training framework for more realistic scenarios with [Unity 3D](https://github.com/Unity-Technologies/ml-agents), 
 [Mujoco](http://www.mujoco.org/), [Bullet Physics](https://github.com/bulletphysics/bullet3), etc, will be supported in the future.
 
+<!-- <em>Gym: Atari</em>    <em>Gym: Box2D </em>   <em>Gym: Classic Control </em>  <em>Gym: MuJoCo </em>-->
+
+<img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/atari.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/box2d.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/classic.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/mujoco.gif" height=250 width=210 >
+
+<!-- <em>Gym: Robotics</em>    <em>DeepMind Control Suite </em>   <em>Gym: RLBench </em>  -->
+
+<img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/robotics.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/dmcontrol.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/RLzoo/blob/master/gif/rlbench.gif" height=250 width=210 > <img src="https://github.com/tensorlayer/tensorlayer/blob/master/img/tl_transparent_logo.png" height=180 width=210 >
+
+
+
+
+
+
 We aim to make it easy to configure for all components within RL, including replacing the networks, optimizers, etc. We also  provide automatically adaptive policies and value functions in the common functions: for the observation space, the vector state or the raw-pixel (image) state are supported automatically according to the shape of the space; for the action space, the discrete action or continuous action are supported automatically according to the shape of the space as well. The deterministic or stochastic property of policy needs to be chosen according to each algorithm. Some environments with raw-pixel based observation (e.g. Atari, RLBench) may be hard to train, be patient and play around with the hyperparameters!
 
 **Table of contents:**
@@ -12,8 +25,10 @@ We aim to make it easy to configure for all components within RL, including repl
   - [Environments](#environments)
   - [Descriptions](#descriptions)
 - [Prerequisites](#prerequisites)
+- [Installation](#installation)
 - [Usage](#usage)
 - [Troubleshooting](#troubleshooting)
+- [Credits](#credits)
 - [Citing](#citing)
 
 Please note that this repository using RL algorithms with **high-level API**. So if you want to get familiar with each algorithm more quickly, please look at our **[RL tutorials](https://github.com/tensorlayer/tensorlayer/tree/master/examples/reinforcement_learning)** where each algorithm is implemented individually in a more straightforward manner.
@@ -79,9 +94,11 @@ the coming months after initial release. We will keep improving the potential pr
 
 * When using the RLBench environments, please add the path of your local rlbench repository to python: 
   ```export PYTHONPATH=PATH_TO_YOUR_LOCAL_RLBENCH_REPO```
-* A dictionary of all different environments is stored in `./baselines/env_list.py`
+* A dictionary of all different environments is stored in `./rlzoo/common/env_list.py`
 
 ## Descriptions:
+The supported configurations for RL algorithms with corresponding environments in RLzoo are listed in the following table.
+
 | Algorithms                 | Action Space        | Policy        | Update     | Envs                                                         |
 | -------------------------- | ------------------- | ------------- | ---------- | ------------------------------------------------------------ |
 | DQN (double, dueling, PER) | Discrete Only       | --            | Off-policy | Atari, Classic Control                                       |
@@ -106,15 +123,22 @@ the coming months after initial release. We will keep improving the potential pr
 * [Mujoco 2.0](http://www.mujoco.org/), [dm_control](https://github.com/deepmind/dm_control), [dm2gym](https://github.com/zuoxingdong/dm2gym) (if using DeepMind Control Suite environments)
 * Vrep, PyRep, RLBench (if using RLBench environments, follows [here](http://www.coppeliarobotics.com/downloads.html), [here](https://github.com/stepjam/PyRep) and [here](https://github.com/stepjam/RLBench))
 
-Run the following line in the root file to install all required packages:
+## Installation:
 
-`pip install -r requirements.txt`
+To install RLzoo package with key requirements:
+
+```
+pip install rlzoo
+```
 
 ## Usage:
 
 ### 0. Quick Start
-Choose whatever environments with whatever RL algorithms supported in RLzoo, and enjoy the game by running:
-```
+Choose whatever environments with whatever RL algorithms supported in RLzoo, and enjoy the game by running following example in the root file of installed package:
+```python
+# in the root folder of rlzoo package
+git clone https://github.com/tensorlayer/RLzoo.git
+cd rlzoo
 python run_rlzoo.py
 ```
 The main script `run_rlzoo.py` follows (almost) the same structure for all algorithms on all environments, see the [**full list of examples**](./examples.md).
@@ -124,21 +148,26 @@ RLzoo provides at least two types of interfaces for running the learning algorit
 
 ### 1. Implicit Configurations
 
-RL zoo with **implicit configurations** means the configurations for learning are not explicitly contained in the main script for running (i.e. `run_rlzoo.py`), but in the `default.py` file in each algorithm folder (for example, `baselines/algorithms/sac/default.py` is the default parameters configuration for SAC algorithm). All configurations include (1) parameter values for the algorithm and learning process, (2) the network structures, (3) the optimizers, etc, are divided into configurations for the algorithm (stored in `alg_params`) and configurations for the learning process (stored in `learn_params`). Whenever you want to change the configurations for the algorithm or learning process, you can either go to the folder of each algorithm and modify parameters in `default.py`, or change the values in `alg_params` (a dictionary of configurations for the algorithm) and `learn_params` (a dictionary of configurations for the learning process) in `run_rlzoo.py` according to the keys. 
+RLzoo with **implicit configurations** means the configurations for learning are not explicitly contained in the main script for running (i.e. `run_rlzoo.py`), but in the `default.py` file in each algorithm folder (for example, `rlzoo/algorithms/sac/default.py` is the default parameters configuration for SAC algorithm). All configurations include (1) parameter values for the algorithm and learning process, (2) the network structures, (3) the optimizers, etc, are divided into configurations for the algorithm (stored in `alg_params`) and configurations for the learning process (stored in `learn_params`). Whenever you want to change the configurations for the algorithm or learning process, you can either go to the folder of each algorithm and modify parameters in `default.py`, or change the values in `alg_params` (a dictionary of configurations for the algorithm) and `learn_params` (a dictionary of configurations for the learning process) in `run_rlzoo.py` according to the keys. 
 
 #### Common Interface:
 
 ```python
+from rlzoo.common.env_wrappers import build_env
+from rlzoo.common.utils import call_default_params
+from rlzoo.algorithms import *
+# choose algorithm
+AlgName = 'TD3'
 # chose environment
 EnvName = 'Pendulum-v0'  
 # select corresponding environment type
-EnvType = ['classic_control', 'atari', 'box2d', 'mujoco', 'dm_control', 'rlbench'][0] 
+EnvType = ['classic_control', 'atari', 'box2d', 'mujoco', 'robotics', 'dm_control', 'rlbench'][0] 
 # build environment with wrappers
 env = build_env(EnvName, EnvType)  
 # call default parameters for the algorithm and learning process
-alg_params, learn_params = call_default_params(env, EnvType, 'TD3')  
+alg_params, learn_params = call_default_params(env, EnvType, AlgName)  
 # instantiate the algorithm
-alg = TD3(**alg_params) 
+alg = eval(AlgName+'(**alg_params)')
 # start the training process
 alg.learn(env=env, mode='train', render=False, **learn_params)  
 # test after training 
@@ -147,21 +176,32 @@ alg.learn(env=env, mode='test', render=True, **learn_params)
 
 #### To Run:
 
-```
+```python
+# in the root folder of rlzoo package
+cd rlzoo
 python run_rlzoo.py
 ```
 
 ### 2. Explicit Configurations
 
-RL zoo with **explicit configurations** means the configurations for learning, including parameter values for the algorithm and the learning process, the network structures used in the algorithms and the optimizers etc, are explicitly displayed in the main script for running. And the main scripts are under the folder of each algorithm, for example, `./baselines/algorithms/sac/run_sac.py` can be called with `python algorithms/sac/run_sac.py` from the root file `./baselines/` to run the learning process same as in above implicit configurations.
+RLzoo with **explicit configurations** means the configurations for learning, including parameter values for the algorithm and the learning process, the network structures used in the algorithms and the optimizers etc, are explicitly displayed in the main script for running. And the main scripts for demonstration are under the folder of each algorithm, for example, `./rlzoo/algorithms/sac/run_sac.py` can be called with `python algorithms/sac/run_sac.py` from the file `./rlzoo` to run the learning process same as in above implicit configurations.
 
 #### A Quick Example:
 
 ```python
+import gym
+from rlzoo.common.utils import make_env, set_seed
+from rlzoo.algorithms import AC
+from rlzoo.common.value_networks import ValueNetwork
+from rlzoo.common.policy_networks import StochasticPolicyNetwork
+
 ''' load environment '''
 env = gym.make('CartPole-v0').unwrapped
-state_shape = env.observation_space.shape
-action_shape = (env.action_space.n,)
+obs_space = env.observation_space
+act_space = env.action_space
+# reproducible
+seed = 2
+set_seed(seed, env)
 
 ''' build networks for the algorithm '''
 num_hidden_layer = 4 #number of hidden layers for the networks
@@ -169,20 +209,20 @@ hidden_dim = 64 # dimension of hidden layers for the networks
 with tf.name_scope('AC'):
         with tf.name_scope('Critic'):
             	# choose the critic network, can be replaced with customized network
-                critic = MlpValueNetwork(state_shape, hidden_dim_list=num_hidden_layer*[hidden_dim])
+                critic = ValueNetwork(obs_space, hidden_dim_list=num_hidden_layer * [hidden_dim])
         with tf.name_scope('Actor'):
             	# choose the actor network, can be replaced with customized network
-                actor = DeterministicPolicyNetwork(state_shape, action_shape, hidden_dim_list=num_hidden_layer*[hidden_dim])
+                actor = StochasticPolicyNetwork(obs_space, act_space, hidden_dim_list=num_hidden_layer * [hidden_dim], output_activation=tf.nn.tanh)
 net_list = [actor, critic] # list of the networks
 
 ''' choose optimizers '''
-a_lr, c_lr = 1e-3, 1e-3  # a_lr: learning rate of the actor; c_lr: learning rate of the critic
+a_lr, c_lr = 1e-4, 1e-2  # a_lr: learning rate of the actor; c_lr: learning rate of the critic
 a_optimizer = tf.optimizers.Adam(a_lr)
 c_optimizer = tf.optimizers.Adam(c_lr)
 optimizers_list=[a_optimizer, c_optimizer]  # list of optimizers
 
 # intialize the algorithm model, with algorithm parameters passed in
-model=AC(net_list, optimizers_list, state_dim=state_shape[0], action_dim=action_shape[0])
+model = AC(net_list, optimizers_list)
 ''' 
 full list of arguments for the algorithm
 ----------------------------------------
@@ -193,8 +233,8 @@ action_range: scale of action values
 '''
 
 # start the training process, with learning parameters passed in
-model.learn(env, train_episodes=100, test_episodes=1000, max_steps=1000,
-        seed=2, save_interval=100, mode='train', render=False)
+model.learn(env, train_episodes=500,  max_steps=200,
+            save_interval=50, mode='train', render=False)
 ''' 
 full list of parameters for training
 ---------------------------------------
@@ -209,13 +249,16 @@ render:  if true, visualize the environment
 
 # test after training
 model.learn(env, test_episodes=100, max_steps=200,  mode='test', render=True)
-
 ```
 
 #### To Run:
 
+In the package folder, we provides examples with explicit configurations for each algorithm. 
+
 ```python
-python algorithms/*ALGORITHM_NAME*/run_*ALGORITHM_NAME*.py 
+# in the root folder of rlzoo package
+cd rlzoo
+python algorithms/<ALGORITHM_NAME>/run_<ALGORITHM_NAME>.py 
 # for example: run actor-critic
 python algorithms/ac/run_ac.py
 ```
@@ -227,12 +270,21 @@ python algorithms/ac/run_ac.py
 * When trying to use RLBench environments, *'No module named rlbench'* can be caused by no RLBench package installed at your local or a mistake in the python path. You should add `export PYTHONPATH=/home/quantumiracle/research/vrep/PyRep/RLBench` every time you try to run the learning script with RLBench environment or add it to you `~/.bashrc` file once for all.
 * If you meet the error that the Qt platform is not loaded correctly when using DeepMind Control Suite environments, it's probably caused by your Ubuntu system not being version 14.04 or 16.04. Check [here](https://github.com/deepmind/dm_control).
 
+## Credits:
+Our contributors include:
+
+[Zihan Ding](https://github.com/quantumiracle?tab=repositories),
+[Tianyang Yu](https://github.com/Tokarev-TT-33),
+[Yanhua Huang](https://github.com/Officium),
+[Hongming Zhang](https://github.com/initial-h),
+[Hao Dong](https://github.com/zsdonghao)
+
 ## Citing:
 
 ```
-@misc{Reinforcement Learning Algorithms Zoo,
+@misc{RLzoo,
   author = {Zihan Ding, Tianyang Yu, Yanhua Huang, Hongming Zhang, Hao Dong},
-  title = {RLzoo},
+  title = {Reinforcement Learning Algorithms Zoo},
   year = {2019},
   publisher = {GitHub},
   journal = {GitHub repository},
